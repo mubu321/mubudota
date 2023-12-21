@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mubudot</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Arial', sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    input[type="color"],
+    button {
+      position: absolute;
+      z-index: 1;
+      border: none;
+      border-radius: 10px; 
+      padding: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.3s ease, opacity 0.5s ease;
+      transform-origin: center bottom;
+      transform: translateY(100%);
+    }
+    input[type="color"] {
+      top: 10px;
+      left: 10px;
+    }
+    input#colorPicker {
+      top: 10px;
+      left: 10px;
+    }
+    input#backgroundColorPicker {
+      top: 10px;
+      left: 80px;
+    }
+    button {
+      font-weight: bold;
+      opacity: 0;
+      background-color: #808080; 
+      color: #fff;
+    }
+    button#resetButton {
+      top: 10px;
+      left: 150px;
+    }
+    button#undoButton {
+      top: 10px;
+      left: 220px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <input type="color" id="colorPicker" value="#808080"> 
+  <input type="color" id="backgroundColorPicker" value="#87CEEB">
+  <button id="resetButton">Reset</button>
+  <button id="undoButton">Undo</button>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    const backgroundColorPicker = document.getElementById('backgroundColorPicker');
+    const resetButton = document.getElementById('resetButton');
+    const undoButton = document.getElementById('undoButton');
+
+    const gridSize = 20;
+    let currentColor = colorPicker.value;
+    let backgroundColor = backgroundColorPicker.value;
+
+    const blocks = [];
+    const blocksHistory = [];
+    let longPressTimer;
+    let isLongPressing = false;
+
+    let isDrawingEnabled = true;
+
+    function drawBackground() {
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawBlocks() {
+      for (const block of blocks) {
+        ctx.fillStyle = `rgba(${block.color.r}, ${block.color.g}, ${block.color.b}, ${block.opacity})`;
+        ctx.fillRect(block.x, block.y, gridSize, gridSize);
+      }
+    }
+
+    function update() {
+      drawBackground();
+      drawBlocks();
+    }
+
+    function handlePress(x, y) {
+      if (isDrawingEnabled) {
+        const blockX = Math.floor(x / gridSize) * gridSize;
+        const blockY = Math.floor(y / gridSize) * gridSize;
+
+        const newBlock = { x: blockX, y: blockY, color: { ...currentColorRGB }, opacity: 0.1 };
+        blocks.push(newBlock);
+        blocksHistory.push([...blocks]); // Save current blocks state to history
+
+        // フェードイン＆移動処理
+        const fadeInInterval = setInterval(() => {
+          newBlock.opacity += 0.1;
+          if (newBlock.opacity >= 1) {
+            clearInterval(fadeInInterval);
+          }
+        }, 50);
+      }
+    }
+
+    function handleLongPress(e) {
+      isLongPressing = true;
+      if (isDrawingEnabled) {
+        const touch = e.changedTouches[0];
+        handlePress(touch.clientX - canvas.offsetLeft, touch.clientY - canvas.offsetTop);
+      }
+    }
+
+    function handleLongPressEnd() {
+      isLongPressing = false;
+    }
+
+    function handleUndo() {
+      if (isDrawingEnabled && blocksHistory.length > 1) {
+        blocksHistory.pop(); // Remove the current state
+        blocks.length = 0; // Clear current blocks
+        blocks.push(...blocksHistory[blocksHistory.length - 1]); // Set blocks to the previous state
+      }
+    }
+
+    function handleReset() {
+      if (isDrawingEnabled) {
+        blocks.length = 0;
+        blocksHistory.length = 0;
+      }
+    }
+
+    colorPicker.addEventListener('input', () => {
+      currentColor = colorPicker.value;
+      updateCurrentColorRGB();
+    });
+
+    backgroundColorPicker.addEventListener('input', () => {
+      backgroundColor = backgroundColorPicker.value;
+    });
+
+    resetButton.addEventListener('click', handleReset);
+    undoButton.addEventListener('click', handleUndo);
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (isDrawingEnabled) {
+        const mouseX = e.clientX - canvas.offsetLeft;
+        const mouseY = e.clientY - canvas.offsetTop;
+
+        handlePress(mouseX, mouseY);
+
+        longPressTimer = setTimeout(() => {
+          if (!isLongPressing) {
+            handleLongPress(e);
+          }
+        }, 500); // 500 milliseconds for long press
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      clearTimeout(longPressTimer);
+      handleLongPressEnd();
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (isDrawingEnabled) {
+        const touch = e.touches[0];
+        handlePress(touch.clientX - canvas.offsetLeft, touch.clientY - canvas.offsetTop);
+
+        longPressTimer = setTimeout(() => {
+          if (!isLongPressing) {
+            handleLongPress(e);
+          }
+        }, 500); // 500 milliseconds for long press
+
+        e.preventDefault(); // Prevent default touch event behavior
+      }
+    });
+
+    canvas.addEventListener('touchend', () => {
+      clearTimeout(longPressTimer);
+      handleLongPressEnd();
+    });
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      update();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // ボタンのフェードイン＆移動処理
+    function fadeInAndMoveButton(button, delay) {
+      setTimeout(() => {
+        let opacity = 0;
+        button.style.opacity = 0;
+        button.style.transform = 'translateY(100%)';
+        button.style.transition = 'transform 0.5s ease, opacity 0.5s ease';
+
+        requestAnimationFrame(() => {
+          button.style.opacity = 1;
+          button.style.transform = 'translateY(0%)';
+        });
+      }, delay);
+    }
+
+    // 初期表示時にボタンをフェードイン＆移動
+    fadeInAndMoveButton(resetButton, 0);
+    fadeInAndMoveButton(undoButton, 200);
+
+    resizeCanvas();
+    gameLoop();
+
+    // RGBを抽出するヘルパーメソッド
+    function updateCurrentColorRGB() {
+      const hexColor = currentColor.substring(1);
+      currentColorRGB.r = parseInt(hexColor.substring(0, 2), 16);
+      currentColorRGB.g = parseInt(hexColor.substring(2, 4), 16);
+      currentColorRGB.b = parseInt(hexColor.substring(4, 6), 16);
+    }
+
+    const currentColorRGB = { r: 128, g: 128, b: 128 }; 
+  </script>
+</body>
+</html>
